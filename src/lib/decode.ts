@@ -16,7 +16,13 @@ function sourceFormatFromMime(mime: string): SourceFormat | null {
 }
 
 interface ImageDecoderResultLike {
-  image: { displayWidth: number; displayHeight: number; duration?: number | null; copyTo(dest: ArrayBufferView): Promise<unknown> };
+  image: {
+    displayWidth: number;
+    displayHeight: number;
+    duration?: number | null;
+    format?: string | null;
+    copyTo(dest: ArrayBufferView, options?: { format?: string }): Promise<unknown>;
+  };
   complete?: boolean;
 }
 
@@ -33,6 +39,35 @@ interface ImageDecoderCtor {
 
 function hasImageDecoder(): boolean {
   return typeof (globalThis as unknown as { ImageDecoder?: unknown }).ImageDecoder === 'function';
+}
+
+async function copyFrameAsRgba(
+  image: ImageDecoderResultLike['image'],
+  dest: Uint8ClampedArray
+): Promise<void> {
+  const fmt = (image.format ?? '').toUpperCase();
+
+  if (fmt === 'BGRA' || fmt === 'BGRX') {
+    await image.copyTo(dest);
+    for (let i = 0; i < dest.length; i += 4) {
+      const b = dest[i];
+      dest[i] = dest[i + 2];
+      dest[i + 2] = b;
+      if (fmt === 'BGRX') dest[i + 3] = 255;
+    }
+    return;
+  }
+
+  if (fmt === 'RGBA' || fmt === 'RGBX' || fmt === '') {
+    await image.copyTo(dest);
+    if (fmt === 'RGBX') {
+      for (let i = 3; i < dest.length; i += 4) dest[i] = 255;
+    }
+    return;
+  }
+
+  // YUV or other non-RGB formats: ask the decoder to convert.
+  await image.copyTo(dest, { format: 'RGBA' });
 }
 
 async function decodeWithImageDecoder(
@@ -56,7 +91,7 @@ async function decodeWithImageDecoder(
     for (let i = 0; i < frameCount; i++) {
       const result = i === 0 ? probe : await decoder.decode({ frameIndex: i });
       const buf = new Uint8ClampedArray(width * height * 4);
-      await result.image.copyTo(buf);
+      await copyFrameAsRgba(result.image, buf);
       const durationUs = result.image.duration ?? 0;
       const delayMs = Math.max(20, Math.round(durationUs / 1000) || 100);
       frames.push({ data: buf, delayMs });
