@@ -45,5 +45,5 @@ export interface DetectionResult {
 export const DEFAULT_THRESHOLDS: Thresholds = {
   general: { lumDelta: 0.1, darkerMax: 0.8, areaPct: 25, hz: 3 },
   red: { areaPct: 25, hz: 3 },
-  motion: { pixelDeltaPct: 5, areaPct: 10, hz: 5 },
+  motion: { pixelDeltaPct: 10, areaPct: 30, hz: 5 },
 };
