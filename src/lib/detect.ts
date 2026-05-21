@@ -287,7 +287,7 @@ export function detectFlashes(image: AnimatedImage, thresholds: Thresholds): Det
   const tsMs = frameTimestampsMs(image);
   const lastIdx = image.frames.length - 1;
   const loopMs = tsMs[lastIdx] + Math.max(20, image.frames[lastIdx].delayMs);
-  const motionWindowMs = Math.max(20, 1000 / Math.max(0.1, thresholds.motion.hz));
+  const motionWindowMs = Math.max(20, thresholds.motion.windowMs);
   const { generalContrib, redContrib } = detectFlashEdges(
     luminance,
     redMask,

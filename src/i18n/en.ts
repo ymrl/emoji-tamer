@@ -35,6 +35,7 @@ export const en: Dict = {
   thresholdRedHz: 'Allowed Hz',
   thresholdMotionPixel: 'Pixel delta (%)',
   thresholdMotionArea: 'Affected area (%)',
+  thresholdMotionWindow: 'Window (ms)',
   thresholdMotionHz: 'Allowed Hz',
   resetThresholds: 'Reset to defaults',
 

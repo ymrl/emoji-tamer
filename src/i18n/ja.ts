@@ -33,6 +33,7 @@ export const ja = {
   thresholdRedHz: '許容 Hz',
   thresholdMotionPixel: '画素差 (%)',
   thresholdMotionArea: '対象面積 (%)',
+  thresholdMotionWindow: '単位時間 (ms)',
   thresholdMotionHz: '許容 Hz',
   resetThresholds: '既定値にリセット',
 

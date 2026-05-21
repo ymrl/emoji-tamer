@@ -151,6 +151,15 @@ export function ThresholdPanel({ value, onChange }: ThresholdPanelProps) {
           onChange={(n) => setMotion({ areaPct: n })}
         />
         <Slider
+          label={t.thresholdMotionWindow}
+          value={value.motion.windowMs}
+          min={20}
+          max={1000}
+          step={10}
+          fractionDigits={0}
+          onChange={(n) => setMotion({ windowMs: n })}
+        />
+        <Slider
           label={t.thresholdMotionHz}
           value={value.motion.hz}
           min={1}
