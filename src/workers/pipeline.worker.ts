@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import './windowShim';
 import * as Comlink from 'comlink';
 import { decodeAnimated } from '../lib/decode';
 import { detectFlashes } from '../lib/detect';
