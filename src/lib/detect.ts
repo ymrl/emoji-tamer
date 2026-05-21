@@ -12,16 +12,29 @@ interface PerPixelState {
   extremumIsRed: Uint8Array;
 }
 
-function computeLuminanceArrays(image: AnimatedImage): { luminance: Float32Array[]; redMask: Uint8Array[]; meanLuminance: number[] } {
+function computeLuminanceArrays(image: AnimatedImage): {
+  luminance: Float32Array[];
+  redMask: Uint8Array[];
+  meanLuminance: number[];
+  rPm: Float32Array[];
+  gPm: Float32Array[];
+  bPm: Float32Array[];
+} {
   const { frames, width, height } = image;
   const pixelCount = width * height;
   const luminance: Float32Array[] = [];
   const redMask: Uint8Array[] = [];
   const meanLuminance: number[] = [];
+  const rPm: Float32Array[] = [];
+  const gPm: Float32Array[] = [];
+  const bPm: Float32Array[] = [];
 
   for (const frame of frames) {
     const Y = new Float32Array(pixelCount);
     const red = new Uint8Array(pixelCount);
+    const rA = new Float32Array(pixelCount);
+    const gA = new Float32Array(pixelCount);
+    const bA = new Float32Array(pixelCount);
     const data = frame.data;
     let sumY = 0;
     let counted = 0;
@@ -34,6 +47,10 @@ function computeLuminanceArrays(image: AnimatedImage): { luminance: Float32Array
       const y = 0.2126 * rLin + 0.7152 * gLin + 0.0722 * bLin;
       Y[p] = y;
       red[p] = isSaturatedRedLinear(rLin, gLin, bLin) ? 1 : 0;
+      const af = a / 255;
+      rA[p] = rLin * af;
+      gA[p] = gLin * af;
+      bA[p] = bLin * af;
       if (a > 0) {
         sumY += y;
         counted++;
@@ -42,9 +59,12 @@ function computeLuminanceArrays(image: AnimatedImage): { luminance: Float32Array
     luminance.push(Y);
     redMask.push(red);
     meanLuminance.push(counted > 0 ? sumY / counted : 0);
+    rPm.push(rA);
+    gPm.push(gA);
+    bPm.push(bA);
   }
 
-  return { luminance, redMask, meanLuminance };
+  return { luminance, redMask, meanLuminance, rPm, gPm, bPm };
 }
 
 function detectFlashEdges(
@@ -122,18 +142,29 @@ function detectFlashEdges(
 }
 
 function detectMotionFrames(
-  luminance: Float32Array[],
+  rPm: Float32Array[],
+  gPm: Float32Array[],
+  bPm: Float32Array[],
   pixelCount: number,
   pixelDeltaThreshold: number
 ): number[] {
-  const frameCount = luminance.length;
+  const frameCount = rPm.length;
   const motionContrib: number[] = new Array(frameCount).fill(0);
   for (let f = 0; f < frameCount; f++) {
-    const prev = luminance[(f - 1 + frameCount) % frameCount];
-    const cur = luminance[f];
+    const prevIdx = (f - 1 + frameCount) % frameCount;
+    const rCur = rPm[f];
+    const gCur = gPm[f];
+    const bCur = bPm[f];
+    const rPrev = rPm[prevIdx];
+    const gPrev = gPm[prevIdx];
+    const bPrev = bPm[prevIdx];
     let count = 0;
     for (let p = 0; p < pixelCount; p++) {
-      if (Math.abs(cur[p] - prev[p]) >= pixelDeltaThreshold) count++;
+      const dR = Math.abs(rCur[p] - rPrev[p]);
+      const dG = Math.abs(gCur[p] - gPrev[p]);
+      const dB = Math.abs(bCur[p] - bPrev[p]);
+      const d = dR > dG ? (dR > dB ? dR : dB) : (dG > dB ? dG : dB);
+      if (d >= pixelDeltaThreshold) count++;
     }
     motionContrib[f] = count;
   }
@@ -210,7 +241,7 @@ export function detectFlashes(image: AnimatedImage, thresholds: Thresholds): Det
     };
   }
 
-  const { luminance, redMask, meanLuminance } = computeLuminanceArrays(image);
+  const { luminance, redMask, meanLuminance, rPm, gPm, bPm } = computeLuminanceArrays(image);
   const { generalContrib, redContrib } = detectFlashEdges(
     luminance,
     redMask,
@@ -219,7 +250,9 @@ export function detectFlashes(image: AnimatedImage, thresholds: Thresholds): Det
     thresholds.general.darkerMax
   );
   const motionContrib = detectMotionFrames(
-    luminance,
+    rPm,
+    gPm,
+    bPm,
     pixelCount,
     thresholds.motion.pixelDeltaPct / 100
   );
