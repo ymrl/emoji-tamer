@@ -16,11 +16,12 @@ function encodeGif(image: AnimatedImage): Blob {
     const rgba = new Uint8Array(frame.data.buffer, frame.data.byteOffset, frame.data.byteLength);
     const palette = quantize(rgba, 256, { format: 'rgba4444', oneBitAlpha: true });
     const indices = applyPalette(rgba, palette, 'rgba4444');
+    const transparentIndex = findTransparentIndex(palette);
     enc.writeFrame(indices, width, height, {
       palette,
       delay: frame.delayMs,
-      transparent: true,
-      transparentIndex: findTransparentIndex(palette),
+      transparent: transparentIndex >= 0,
+      transparentIndex: transparentIndex >= 0 ? transparentIndex : 0,
       repeat: 0,
       dispose: 2,
     });
@@ -33,7 +34,7 @@ function findTransparentIndex(palette: number[][]): number {
   for (let i = 0; i < palette.length; i++) {
     if ((palette[i][3] ?? 255) === 0) return i;
   }
-  return 0;
+  return -1;
 }
 
 function encodeApng(image: AnimatedImage): Blob {
