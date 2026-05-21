@@ -146,18 +146,34 @@ function detectMotionFrames(
   gPm: Float32Array[],
   bPm: Float32Array[],
   pixelCount: number,
-  pixelDeltaThreshold: number
+  pixelDeltaThreshold: number,
+  tsMs: number[],
+  loopMs: number,
+  windowMs: number
 ): number[] {
   const frameCount = rPm.length;
   const motionContrib: number[] = new Array(frameCount).fill(0);
   for (let f = 0; f < frameCount; f++) {
-    const prevIdx = (f - 1 + frameCount) % frameCount;
+    let target = tsMs[f] - windowMs;
+    if (loopMs > 0) {
+      target = ((target % loopMs) + loopMs) % loopMs;
+    } else if (target < 0) {
+      target = 0;
+    }
+    let g = 0;
+    for (let i = frameCount - 1; i >= 0; i--) {
+      if (tsMs[i] <= target) {
+        g = i;
+        break;
+      }
+    }
+    if (g === f) g = (f - 1 + frameCount) % frameCount;
     const rCur = rPm[f];
     const gCur = gPm[f];
     const bCur = bPm[f];
-    const rPrev = rPm[prevIdx];
-    const gPrev = gPm[prevIdx];
-    const bPrev = bPm[prevIdx];
+    const rPrev = rPm[g];
+    const gPrev = gPm[g];
+    const bPrev = bPm[g];
     let count = 0;
     for (let p = 0; p < pixelCount; p++) {
       const dR = Math.abs(rCur[p] - rPrev[p]);
@@ -203,6 +219,32 @@ function eventsFromContrib(
   return events;
 }
 
+function motionEventsFromContrib(
+  contrib: number[],
+  pixelCount: number,
+  areaPct: number,
+  tsMs: number[],
+  loopMs: number,
+  windowMs: number
+): FlashEvent[] {
+  const threshold = (areaPct / 100) * pixelCount;
+  const events: FlashEvent[] = [];
+  if (contrib.length === 0 || loopMs <= 0 || windowMs <= 0) return events;
+  for (let t = 0; t < loopMs; t += windowMs) {
+    let f = 0;
+    for (let i = tsMs.length - 1; i >= 0; i--) {
+      if (tsMs[i] <= t) {
+        f = i;
+        break;
+      }
+    }
+    if (contrib[f] >= threshold) {
+      events.push({ kind: 'motion', frameIndex: f, tMs: t });
+    }
+  }
+  return events;
+}
+
 function maxHzInSlidingWindow(events: FlashEvent[], loopMs: number, windowMs = 1000): number {
   if (events.length === 0) return 0;
   const times: number[] = [];
@@ -242,6 +284,10 @@ export function detectFlashes(image: AnimatedImage, thresholds: Thresholds): Det
   }
 
   const { luminance, redMask, meanLuminance, rPm, gPm, bPm } = computeLuminanceArrays(image);
+  const tsMs = frameTimestampsMs(image);
+  const lastIdx = image.frames.length - 1;
+  const loopMs = tsMs[lastIdx] + Math.max(20, image.frames[lastIdx].delayMs);
+  const motionWindowMs = Math.max(20, 1000 / Math.max(0.1, thresholds.motion.hz));
   const { generalContrib, redContrib } = detectFlashEdges(
     luminance,
     redMask,
@@ -254,11 +300,11 @@ export function detectFlashes(image: AnimatedImage, thresholds: Thresholds): Det
     gPm,
     bPm,
     pixelCount,
-    thresholds.motion.pixelDeltaPct / 100
+    thresholds.motion.pixelDeltaPct / 100,
+    tsMs,
+    loopMs,
+    motionWindowMs
   );
-  const tsMs = frameTimestampsMs(image);
-  const lastIdx = image.frames.length - 1;
-  const loopMs = tsMs[lastIdx] + Math.max(20, image.frames[lastIdx].delayMs);
 
   const generalEvents = eventsFromContrib(
     generalContrib,
@@ -274,12 +320,13 @@ export function detectFlashes(image: AnimatedImage, thresholds: Thresholds): Det
     'red',
     tsMs
   );
-  const motionEvents = eventsFromContrib(
+  const motionEvents = motionEventsFromContrib(
     motionContrib,
     pixelCount,
     thresholds.motion.areaPct,
-    'motion',
-    tsMs
+    tsMs,
+    loopMs,
+    motionWindowMs
   );
 
   const generalHz = maxHzInSlidingWindow(generalEvents, loopMs);
